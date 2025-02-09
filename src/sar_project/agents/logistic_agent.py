@@ -4,6 +4,7 @@ import datetime
 from typing import Dict, List, Any
 from autogen import AssistantAgent
 from sar_project.agents.base_agent import SARBaseAgent
+from openai import OpenAI
 
 class LogisticAgent(SARBaseAgent):
     def __init__(self, name="logistics_specialist", knowledge_base=None):
@@ -174,3 +175,21 @@ class LogisticAgent(SARBaseAgent):
             "new_status": status,
             "timestamp": str(datetime.datetime.now())
         }
+    def generate(self, prompt: str) -> str:
+        config = self.get_config_list()
+        
+
+        # Initialize OpenAI client
+        client = OpenAI(api_key=config[0]["api_key"])
+
+        # Generate completion
+        completion = client.chat.completions.create(
+            model=config[0]["model"],
+            messages=[
+                
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        
+        return completion.choices[0].message.content
