@@ -1,11 +1,9 @@
-from abc import ABC, abstractmethod
 import json
 import datetime
 from typing import Dict, List, Any
-from autogen import AssistantAgent
-from sar_project.agents.base_agent import SARBaseAgent
-from openai import OpenAI
-
+from base_agent import SARBaseAgent
+from google import genai
+import os
 class LogisticAgent(SARBaseAgent):
     def __init__(self, name="logistics_specialist", knowledge_base=None):
         system_message = """You are a Logistic Supply specialist for SAR operations. Your role is to:
@@ -39,6 +37,12 @@ class LogisticAgent(SARBaseAgent):
             system_message=system_message,
             knowledge_base=knowledge_base
         )
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+            
+        
+        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
         self.current_conditions = {}
         self.resources = {}
@@ -48,6 +52,7 @@ class LogisticAgent(SARBaseAgent):
     def process_request(self, message: Dict[str, Any]) -> Dict[str, Any]:
         """Process logistics-related requests"""
         try:
+            print("processing request")
             # Extract request type and parameters from the message
             request_type = message.get("request_type")
             params = message.get("parameters", {})
@@ -61,6 +66,7 @@ class LogisticAgent(SARBaseAgent):
                 )
             elif request_type == "get_supply_count":
                 return self.get_supply_count()
+            
             elif request_type == "assess_supply_needs":
                 return self.assess_supply_needs(
                     location=params.get("location"),
@@ -177,19 +183,10 @@ class LogisticAgent(SARBaseAgent):
         }
     def generate(self, prompt: str) -> str:
         config = self.get_config_list()
-        
-
-        # Initialize OpenAI client
-        client = OpenAI(api_key=config[0]["api_key"])
-
-        # Generate completion
-        completion = client.chat.completions.create(
-            model=config[0]["model"],
-            messages=[
-                
-                {"role": "user", "content": prompt}
-            ]
+        response = self.client.models.generate_content(
+            model="gemini-2.0-flash", contents=prompt
         )
+        
 
         
-        return completion.choices[0].message.content
+        return response.text

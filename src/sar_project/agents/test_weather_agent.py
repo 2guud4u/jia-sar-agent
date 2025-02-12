@@ -1,5 +1,5 @@
 import pytest
-from sar_project.agents.weather_agent import WeatherAgent
+from weather_agent import WeatherAgent
 
 class TestWeatherAgent:
     @pytest.fixture

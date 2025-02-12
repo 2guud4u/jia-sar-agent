@@ -1,6 +1,5 @@
 import pytest
-from datetime import datetime
-from sar_project.agents.logistic_agent import LogisticAgent
+from logistic_agent import LogisticAgent
 
 class TestLogisticAgent:
     @pytest.fixture

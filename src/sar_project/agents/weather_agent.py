@@ -1,4 +1,4 @@
-from sar_project.agents.base_agent import SARBaseAgent
+from base_agent import SARBaseAgent
 class WeatherAgent(SARBaseAgent):
     def __init__(self, name="weather_specialist"):
         super().__init__(
