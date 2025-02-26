@@ -11,4 +11,4 @@ Add a .env file with
 GEMINI_API_KEY="{your key}"
 ``
 
-Test agent with test.ipynb
+Test agent with sar_project_old/src/sar_project/agents/logistic_test.ipynb
