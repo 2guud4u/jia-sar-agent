@@ -10,6 +10,7 @@ Install dependencies with
 ``
 pip install -r requirements.txt
 ``
+
 Add a .env file with 
 ``
 GEMINI_API_KEY="{your key}"
