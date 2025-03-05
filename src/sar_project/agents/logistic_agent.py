@@ -4,6 +4,7 @@ from typing import Dict, List, Any
 from base_agent import SARBaseAgent
 from google import genai
 import os
+
 class LogisticAgent(SARBaseAgent):
     def __init__(self, name="logistics_specialist", knowledge_base=None):
         system_message = """You are a Logistic Supply specialist for SAR operations. Your role is to:
@@ -40,61 +41,138 @@ class LogisticAgent(SARBaseAgent):
         from dotenv import load_dotenv
         load_dotenv()
         
-            
-        
         self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
+        # Enhanced data tracking
         self.current_conditions = {}
         self.resources = {}
         self.regulations = {}
-        self.historical_incidents = {}
+        self.historical_incidents = []  # Changed to a list to store multiple incidents
+        self.resource_usage_log = []  # New log to track resource usage across missions
 
     def process_request(self, message: Dict[str, Any]) -> Dict[str, Any]:
-        """Process logistics-related requests"""
+        """
+        Enhanced process_request method with incident and resource tracking
+        """
         try:
-            print("processing request")
+            # Log the entire incoming message for comprehensive tracking
+            request_log = {
+                "timestamp": str(datetime.datetime.now()),
+                "full_message": message
+            }
+            
             # Extract request type and parameters from the message
             request_type = message.get("request_type")
             params = message.get("parameters", {})
 
+            # Process the request based on type
             if request_type == "get_supplies":
-                return self.get_supplies(
+                response = self.get_supplies(
                     location=params.get("location"),
                     team=params.get("team"),
                     duration=params.get("duration"),
                     required_resources=params.get("resources", [])
                 )
             elif request_type == "get_supply_count":
-                return self.get_supply_count()
+                response = self.get_supply_count()
             
             elif request_type == "assess_supply_needs":
-                return self.assess_supply_needs(
+                response = self.assess_supply_needs(
                     location=params.get("location"),
                     conditions=params.get("conditions", {})
                 )
             else:
-                return {
+                response = {
                     "status": "error",
-                    "message": f"Unknown request type: {request_type}",
-                    "timestamp": str(datetime.datetime.now())
+                    "message": f"Unknown request type: {request_type}"
                 }
 
+            # Enhance response with request details and track the incident
+            full_response = {
+                "original_request": request_log,
+                **response,
+                "request_details": {
+                    "type": request_type,
+                    "parameters": params
+                }
+            }
+
+            # Log the incident for historical analysis
+            self.log_incident(full_response)
+
+            return full_response
+
         except Exception as e:
-            return {
+            error_response = {
                 "status": "error",
                 "message": str(e),
-                "timestamp": str(datetime.datetime.now())
+                "timestamp": str(datetime.datetime.now()),
+                "original_message": message
             }
+            self.log_incident(error_response)
+            return error_response
+
+    def log_incident(self, incident_data: Dict[str, Any]):
+        """
+        Log incidents for future reference and analysis
+        """
+        try:
+            # Add timestamp if not present
+            if "timestamp" not in incident_data:
+                incident_data["timestamp"] = str(datetime.datetime.now())
+            
+            # Store the incident
+            self.historical_incidents.append(incident_data)
+            
+            # Optional: Limit the number of stored incidents to prevent excessive memory usage
+            if len(self.historical_incidents) > 100:
+                self.historical_incidents = self.historical_incidents[-100:]
+            
+            return True
+        except Exception as e:
+            print(f"Error logging incident: {e}")
+            return False
+
+    def track_resource_usage(self, mission_id: str, resources_used: Dict[str, Any]):
+        """
+        Track resources used in a specific mission
+        """
+        usage_log_entry = {
+            "mission_id": mission_id,
+            "timestamp": str(datetime.datetime.now()),
+            "resources_used": resources_used
+        }
+        
+        self.resource_usage_log.append(usage_log_entry)
+        
+        # Update overall resource inventory
+        for resource, quantity in resources_used.items():
+            if resource in self.resources:
+                self.resources[resource] -= quantity
+            else:
+                print(f"Warning: Resource {resource} not found in inventory")
+        
+        return usage_log_entry
+
+    def get_historical_incidents(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Retrieve recent historical incidents
+        """
+        return self.historical_incidents[-limit:]
 
     def get_supplies(self, location: str, team: str, duration: int, 
                     required_resources: List[str]) -> Dict[str, Any]:
         """Generate supply recommendations using the configured LLM"""
         try:
-            prompt = f"""Based on the following mission parameters, provide detailed supply recommendations:
+            # Use historical incident analysis to inform supply recommendations
+            historical_context = self.analyze_historical_incidents(location)
+
+            prompt = f"""Based on the following mission parameters and historical context, provide detailed supply recommendations:
             Location: {location}
             Team Size: {team}
             Duration: {duration} days
             Required Resources: {', '.join(required_resources)}
+            Historical Context: {historical_context}
 
             Please provide a structured response including:
             1. Essential supplies list with quantities
@@ -127,66 +205,29 @@ class LogisticAgent(SARBaseAgent):
                 "timestamp": str(datetime.datetime.now())
             }
 
-    def assess_supply_needs(self, location: str, conditions: Dict[str, Any]) -> Dict[str, Any]:
-        """Assess supply needs based on conditions using the configured LLM"""
-        try:
-            prompt = f"""Analyze the following conditions and provide a comprehensive supply needs assessment:
-            Location: {location}
-            Environmental Conditions: {json.dumps(conditions, indent=2)}
+    def analyze_historical_incidents(self, location: str) -> str:
+        """
+        Analyze historical incidents for a specific location
+        """
+        relevant_incidents = [
+            incident for incident in self.historical_incidents 
+            if incident.get('location') == location
+        ]
+        
+        if not relevant_incidents:
+            return "No previous incidents found for this location."
+        
+        # Summarize key insights from relevant incidents
+        summary = "Previous Incident Insights:\n"
+        for incident in relevant_incidents[-3:]:  # Take last 3 incidents
+            summary += f"- {incident.get('timestamp')}: {incident.get('message', 'No details')}\n"
+        
+        return summary
 
-            Please provide a structured analysis including:
-            1. Critical supply requirements
-            2. Environmental impact considerations
-            3. Risk assessment and mitigation strategies
-            4. Recommended backup supplies and contingencies
-            5. Resource optimization recommendations
-            """
-
-            # Use Autogen's built-in message handling
-            response = self.generate(prompt)
-
-            assessment = {
-                "status": "success",
-                "assessment": response,
-                "metadata": {
-                    "location": location,
-                    "conditions": conditions,
-                    "timestamp": str(datetime.datetime.now())
-                }
-            }
-            
-            return assessment
-
-        except Exception as e:
-            return {
-                "status": "error",
-                "message": f"Failed to assess supply needs: {str(e)}",
-                "timestamp": str(datetime.datetime.now())
-            }
-
-    def get_supply_count(self) -> Dict[str, Any]:
-        """Get current supply inventory"""
-        return {
-            "status": "success",
-            "inventory": self.resources,
-            "timestamp": str(datetime.datetime.now())
-        }
-
-    def update_mission_status(self, status: str) -> Dict[str, Any]:
-        """Update the agent's mission status"""
-        self.mission_status = status
-        return {
-            "status": "success",
-            "message": "Mission status updated",
-            "new_status": status,
-            "timestamp": str(datetime.datetime.now())
-        }
     def generate(self, prompt: str) -> str:
+        """Generate content using Gemini"""
         config = self.get_config_list()
         response = self.client.models.generate_content(
             model="gemini-2.0-flash", contents=prompt
         )
-        
-
-        
         return response.text
